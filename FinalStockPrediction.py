@@ -507,8 +507,8 @@ plt.tight_layout()
 plt.show()
 
 
-model = ARIMA(train_data, order=(3, 1, 2))
-fitted = model.fit(disp=-1)
+model = ARIMA(train_data, order=(1, 0, 1))
+fitted = model.fit()
 print(fitted.summary())
 
 --------------------------------------------------------------------------------
@@ -707,7 +707,7 @@ df_log = np.log(GOOG['Close'])
 train_data, test_data = df_log[3:int(len(df_log)*0.9)], df_log[int(len(df_log)*0.9):]
 plt.rcParams.update({'font.size': 12})
 plt.figure()
-fc, se, conf = fitted.forecast(126, alpha=0.05)  # 95% confidence
+fc, se, conf = fitted.forecast(519, alpha=0.05)  # 95% confidence
 
 fc_series = pd.Series(fc, index=test_data.index)
 lower_series = pd.Series(conf[:, 0], index=test_data.index)

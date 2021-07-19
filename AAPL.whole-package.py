@@ -1,17 +1,19 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import pandas_datareader as web
+from pandas_datareader import data as pdr
 import datetime as dt
 import seaborn as sns
 import os
 import math
+from datetime import datetime
+import yfinance as yf
 
 from statsmodels.tsa.arima.model import ARIMA
 from pmdarima.arima import auto_arima
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from tensorflow.keras import Sequential
+from tensorflow.keras import layers
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Dense,Dropout,LSTM
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
@@ -27,8 +29,9 @@ name = 'Apple Inc.'
 
 end = datetime.now()
 start = datetime(end.year - 5, end.month, end.day)
+yf.pdr_override()
 
-data= web.DataReader(company, 'yahoo', start, end)
+data= pdr.get_data_yahoo(company, start, end)
 
 --------------------------------------------------------------------------------
 
@@ -86,6 +89,66 @@ plt.show()
 #Arima Model
 df_log = np.log(data['Close'])
 plt.rcParams.update({'font.size': 10})
+
+
+from statsmodels.tsa.arima_model import ARIMA
+import pmdarima as pm
+
+model = pm.auto_arima(df_log, start_p=1, start_q=1,
+                      test='adf',       # use adftest to find optimal 'd'
+                      max_p=3, max_q=3, # maximum p and q
+                      m=1,              # frequency of series
+                      d=None,           # let model determine 'd'
+                      seasonal=False,   # No Seasonality
+                      start_P=0, 
+                      D=0, 
+                      trace=True,
+                      error_action='ignore',  
+                      suppress_warnings=True, 
+                      stepwise=True)
+
+print(model.summary())
+
+
+
+# Forecast 
+df_log = np.log(data['Close'])
+plt.rcParams.update({'font.size': 12})
+train_data, test_data = df_log[3:int(len(df_log)*0.9)], df_log[int(len(df_log)*0.9):]
+
+n_periods = 126
+fc, conf = model.predict(n_periods=n_periods, return_conf_int=True)
+index_of_fc = np.arange(len(df_log), len(df_log)+n_periods)
+
+fc_series = pd.Series(fc, index=test_data.index)
+lower_series = pd.Series(conf[:, 0], index=test_data.index)
+upper_series = pd.Series(conf[:, 1], index=test_data.index)
+
+plt.figure(figsize=(8,5), dpi=100)
+plt.plot(train_data, label='Training', linewidth=1)
+plt.plot(test_data, color = 'blue', label='Actual Stock Price', linewidth=1)
+plt.plot(fc_series, color = 'orange',label='Predicted Stock Price', linewidth=1)
+plt.fill_between(lower_series.index, lower_series, upper_series, 
+                 color='k', alpha=.10)
+plt.title(f'{name} Stock Price Prediction')
+plt.xlabel('Time')
+plt.ylabel('Actual Stock Price')
+plt.legend(loc='upper left', fontsize=10)
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #split data into train and test set
 train_data, test_data = df_log[3:int(len(df_log)*0.9)], df_log[int(len(df_log)*0.9):]

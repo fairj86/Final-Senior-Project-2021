@@ -2,18 +2,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import pandas_datareader as web
-import datetime as dt
+from pandas_datareader import data as pdr
 import seaborn as sns
 import os
 import math
-
+from datetime import datetime
+import yfinance as yf
 
 from statsmodels.tsa.arima.model import ARIMA
 from pmdarima.arima import auto_arima
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from tensorflow.keras import Sequential
 from tensorflow.keras import Model
+from tensorflow.keras import layers
 from tensorflow.keras.layers import Dense,Dropout,LSTM
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 
@@ -29,7 +30,7 @@ name = 'Alphabet.com'
 end = datetime.now()
 start = datetime(end.year - 5, end.month, end.day)
 
-data= web.DataReader(company, 'yahoo', start, end)
+data= web.datareader(company, 'yahoo', start, end)
 
 --------------------------------------------------------------------------------
 
@@ -104,10 +105,6 @@ plt.tight_layout()
 plt.show()
 
 #Programing the ARIMA Model
-model = ARIMA(train_data, order=(3, 1, 2))  
-fitted = model.fit(disp=-1)  
-print(fitted.summary())
-
 model_autoARIMA = auto_arima(train_data, start_p=0, start_q=0,
 test='adf',       # use adftest to find optimal 'd'
 max_p=3, max_q=3, # maximum p and q
@@ -122,24 +119,30 @@ suppress_warnings=True,
 stepwise=True,)
 print(model_autoARIMA.summary())
 
+model = ARIMA(train_data, order=(1, 1, 0))
+fitted = model.fit()
+print(fitted.summary())
+
 plt.figure()
 model_autoARIMA.plot_diagnostics()
 plt.subplots_adjust(top=1.4,bottom=1.25, left=1.25)
 plt.tight_layout()
 plt.show()
-
 --------------------------------------------------------------------------------
 
 # Forecast 
 df_log = np.log(data['Close'])
 plt.rcParams.update({'font.size': 12})
 train_data, test_data = df_log[3:int(len(df_log)*0.9)], df_log[int(len(df_log)*0.9):]
-plt.figure()
-fc, se, conf = fitted.forecast(126, alpha=0.05)  # 95% confidence
+
+n_periods = 126
+fc, conf = model.predict(n_periods=n_periods, return_conf_int=True)
+index_of_fc = np.arange(len(df_log), len(df_log)+n_periods)
 
 fc_series = pd.Series(fc, index=test_data.index)
 lower_series = pd.Series(conf[:, 0], index=test_data.index)
 upper_series = pd.Series(conf[:, 1], index=test_data.index)
+
 plt.figure(figsize=(8,5), dpi=100)
 plt.plot(train_data, label='Training', linewidth=1)
 plt.plot(test_data, color = 'blue', label='Actual Stock Price', linewidth=1)
@@ -218,9 +221,8 @@ model.fit(x_train,
           batch_size = 32,
           callbacks = [checkpointer])
 
-
 #Testing the Data Accurancy
-test_start = dt.datetime(2020,1,1)
+test_start = dt.datetime(end.year - 1, end.month, end.day)
 test_end = dt.datetime.now()
 
 test_data = web.DataReader(company, 'yahoo', test_start, test_end)
@@ -259,3 +261,105 @@ plt.show()
 
 
 
+
+
+from statsmodels.tsa.stattools import adfuller
+from numpy import log
+
+result = adfuller(df_log.dropna())
+print('ADF Statistic: %f' % result[0])
+print('p-value: %f' % result[1])
+
+
+from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+import matplotlib.pyplot as plt
+plt.rcParams.update({'figure.figsize':(9,7), 'figure.dpi':120})
+
+plt.figure()
+# Original Series
+fig, axes = plt.subplots(3, 2, sharex=True)
+axes[0, 0].plot(df_log, linewidth=1); axes[0, 0].set_title('Original Series')
+plot_acf(df_log, ax=axes[0, 1], linewidth=1)
+
+# 1st Differencing
+axes[1, 0].plot(df_log.diff(), linewidth=1); axes[1, 0].set_title('1st Order Differencing')
+plot_acf(df_log.diff().dropna(), ax=axes[1, 1], linewidth=1)
+
+# 2nd Differencing
+axes[2, 0].plot(df_log.diff().diff(), linewidth=1); axes[2, 0].set_title('2nd Order Differencing')
+plot_acf(df_log.diff().diff().dropna(), ax=axes[2, 1], linewidth=1)
+plt.tight_layout()
+plt.show()
+
+
+from pmdarima.arima.utils import ndiffs
+## Adf Test
+ndiffs(df_log, test='adf')  # 1
+
+# KPSS test
+ndiffs(df_log, test='kpss')  # 1
+
+# PP test:
+ndiffs(df_log, test='pp')  # 1
+
+
+# PACF plot of 1st differenced series
+plt.rcParams.update({'figure.figsize':(9,3), 'figure.dpi':120})
+
+plt.figure()
+fig, axes = plt.subplots(1, 2, sharex=True)
+axes[0].plot(df_log.diff(), linewidth = 1); axes[0].set_title('1st Differencing')
+axes[1].set(ylim=(0,5))
+plot_pacf(df_log.diff().dropna(), ax=axes[1], linewidth = 1)
+
+plt.show()
+
+plt.figure()
+fig, axes = plt.subplots(1, 2, sharex=True)
+axes[0].plot(df_log.diff(), linewidth = 1); axes[0].set_title('1st Differencing')
+axes[1].set(ylim=(0,1.2))
+plot_acf(df_log.diff().dropna(), ax=axes[1])
+
+plt.show()
+
+
+from statsmodels.tsa.arima_model import ARIMA
+import pmdarima as pm
+
+model = pm.auto_arima(df_log, start_p=1, start_q=1,
+                      test='adf',       # use adftest to find optimal 'd'
+                      max_p=3, max_q=3, # maximum p and q
+                      m=1,              # frequency of series
+                      d=None,           # let model determine 'd'
+                      seasonal=False,   # No Seasonality
+                      start_P=0, 
+                      D=0, 
+                      trace=True,
+                      error_action='ignore',  
+                      suppress_warnings=True, 
+                      stepwise=True)
+
+print(model.summary())
+
+
+# Forecast
+n_periods = 24
+fc, confint = model.predict(n_periods=n_periods, return_conf_int=True)
+index_of_fc = np.arange(len(df_log), len(df_log)+n_periods)
+
+# make series for plotting purpose
+fc_series = pd.Series(fc, index=index_of_fc)
+lower_series = pd.Series(confint[:, 0], index=index_of_fc)
+upper_series = pd.Series(confint[:, 1], index=index_of_fc)
+
+# Plot
+plt.figure()
+plt.plot(df_log)
+plt.plot(fc_series, color='darkgreen')
+plt.fill_between(lower_series.index, 
+                 lower_series, 
+                 upper_series, 
+                 color='k', alpha=.15)
+
+plt.title(f"Final Forecast of {company}")
+plt.show()

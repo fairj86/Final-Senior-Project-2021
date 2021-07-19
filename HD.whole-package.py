@@ -103,10 +103,6 @@ plt.tight_layout()
 plt.show()
 
 #Programing the ARIMA Model
-model = ARIMA(train_data, order=(3, 1, 2))  
-fitted = model.fit(disp=-1)  
-print(fitted.summary())
-
 model_autoARIMA = auto_arima(train_data, start_p=0, start_q=0,
 test='adf',       # use adftest to find optimal 'd'
 max_p=3, max_q=3, # maximum p and q
@@ -127,15 +123,19 @@ plt.subplots_adjust(top=1.4,bottom=1.25, left=1.25)
 plt.tight_layout()
 plt.show()
 
+model = ARIMA(train_data, order=(1, 0, 2))  
+fitted = model.fit(disp=-1)  
+print(fitted.summary())
+
 --------------------------------------------------------------------------------
 
 # Forecast 
 df_log = np.log(data['Close'])
 plt.rcParams.update({'font.size': 12})
 train_data, test_data = df_log[3:int(len(df_log)*0.9)], df_log[int(len(df_log)*0.9):]
-plt.figure()
-fc, se, conf = fitted.forecast(126, alpha=0.05)  # 95% confidence
 
+# Forecast
+fc, se, conf = fitted.forecast(3, alpha=0.05)  # 95% confidence
 fc_series = pd.Series(fc, index=test_data.index)
 lower_series = pd.Series(conf[:, 0], index=test_data.index)
 upper_series = pd.Series(conf[:, 1], index=test_data.index)
